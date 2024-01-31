@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -14,14 +15,15 @@ type result struct {
 }
 
 // It takes a url as a string and a channel with only write end. Won't be able to read any data
-func get(url string, ch chan<- result) {
+func get(ctx context.Context, url string, ch chan<- result) {
 	start := time.Now()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
-	if resp, err := http.Get(url); err != nil {
+	if resp, err := http.DefaultClient.Do(req); err != nil {
 		ch <- result{url, err, 0}
 	} else {
 		t := time.Since(start).Round(time.Millisecond)
-        time.Sleep(100*time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 		ch <- result{url, nil, t}
 		resp.Body.Close()
 	}
@@ -37,8 +39,11 @@ func main() {
 		"https://www.google.com",
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 100 * time.Millisecond)
+	defer cancel()
+
 	for _, url := range list {
-		go get(url, resultChan)
+		go get(ctx, url, resultChan)
 	}
 
 	for range list {
