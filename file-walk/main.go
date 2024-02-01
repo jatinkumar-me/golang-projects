@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
 // Build a program to find duplicate files based on their content.
@@ -20,6 +21,8 @@ type pair struct {
 type fileList []string
 
 type results map[string]fileList
+
+// SEQUENTIAL APPROACH ================================================================
 
 func hashFile(path string) pair {
 	file, err := os.Open(path)
@@ -53,10 +56,10 @@ func searchTree(dir string) (results, error) {
 	return hashes, err
 }
 
-func fileWalkSeq(dir string) {
-	if hashes, err := searchTree(os.Args[1]); err == nil {
+func doFileWalk(dir string) {
+	if hashes, err := fileWalkConcur(os.Args[1]); err == nil {
 		for hash, files := range hashes {
-			if len(files) > 0 {
+			if len(files) > 1 {
 				fmt.Println(hash[len(hash)-7:], len(files))
 
 				for _, file := range files {
@@ -67,11 +70,73 @@ func fileWalkSeq(dir string) {
 	}
 }
 
+// CONCURRENT APPROACH ================================================================
+
+// Use a fixed pool of goroutines and a collector and channels
+
+func collectHashes(pairs <-chan pair, result chan<- results) {
+	// fmt.Println("collecting hashes")
+	hashes := make(results)
+
+	for p := range pairs {
+		// fmt.Println("received pair", p)
+		hashes[p.hash] = append(hashes[p.hash], p.path)
+	}
+
+	result <- hashes
+}
+
+func processFiles(paths <-chan string, pairs chan<- pair, done chan<- bool) {
+	for path := range paths {
+		pairs <- hashFile(path)
+	}
+
+	done <- true
+}
+
+func fileWalkConcur(dir string) (results, error) {
+	workers := 2 * runtime.GOMAXPROCS(0)
+	fmt.Println("Main program started with", workers, "workers")
+
+	paths := make(chan string)
+	pairs := make(chan pair)
+	done := make(chan bool)
+	result := make(chan results)
+
+	for i := 0; i < workers; i++ {
+		go processFiles(paths, pairs, done)
+	}
+
+	go collectHashes(pairs, result)
+
+	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+		if info.Mode().IsRegular() && info.Size() > 0 {
+			paths <- path
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	close(paths)
+
+	for i := 0; i < workers; i++ {
+		<-done
+	}
+
+	close(pairs)
+
+	hashes := <-result
+	return hashes, nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		log.Fatal("Missing parameter, directory name is required!")
 	}
 
 	dir := os.Args[1]
-	fileWalkSeq(dir)
+	doFileWalk(dir)
 }
