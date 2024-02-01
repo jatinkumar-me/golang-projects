@@ -53,20 +53,25 @@ func searchTree(dir string) (results, error) {
 	return hashes, err
 }
 
+func fileWalkSeq(dir string) {
+	if hashes, err := searchTree(os.Args[1]); err == nil {
+		for hash, files := range hashes {
+			if len(files) > 0 {
+				fmt.Println(hash[len(hash)-7:], len(files))
+
+				for _, file := range files {
+					fmt.Println("  ", file)
+				}
+			}
+		}
+	}
+}
+
 func main() {
-    if len(os.Args) < 2 {
-        log.Fatal("Missing parameter, directory name is required!")
-    }
+	if len(os.Args) < 2 {
+		log.Fatal("Missing parameter, directory name is required!")
+	}
 
-    if hashes, err := searchTree(os.Args[1]); err == nil {
-        for hash, files := range hashes {
-            if (len(files) > 0) {
-                fmt.Println(hash[len(hash) - 7:], len(files))
-
-                for _, file := range files {
-                    fmt.Println("  ", file)
-                }
-            }
-        }
-    }
+	dir := os.Args[1]
+	fileWalkSeq(dir)
 }
