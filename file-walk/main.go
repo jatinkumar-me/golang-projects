@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 )
 
 // Build a program to find duplicate files based on their content.
@@ -131,6 +132,64 @@ func fileWalkConcur(dir string) (results, error) {
 	hashes := <-result
 	return hashes, nil
 }
+
+// CONCURRENT APPROACH 2 =============================================================
+// multi-threaded walk of the directory tree;
+
+func fileWalkConcur2(dir string) (results, error) {
+	workers := 2 * runtime.GOMAXPROCS(0)
+
+	paths := make(chan string)
+	pairs := make(chan pair)
+	done := make(chan bool)
+	result := make(chan results)
+
+	for i := 0; i < workers; i++ {
+		go processFiles(paths, pairs, done)
+	}
+
+	go collectHashes(pairs, result)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	err := walkDir(dir, paths, wg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	wg.Wait()
+	close(paths)
+
+	for i := 0; i < workers; i++ {
+		<-done
+	}
+
+	close(pairs)
+
+	hashes := <-result
+	return hashes, nil
+}
+
+func walkDir(dir string, paths chan<- string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+		if info.Mode().IsDir() && path != dir {
+			wg.Add(1)
+			go walkDir(path, paths, wg)
+			return filepath.SkipDir
+		}
+
+		if info.Mode().IsRegular() && info.Size() > 0 {
+			paths <- path
+		}
+
+		return nil
+	})
+	return err
+}
+
+// ===================================================================================
 
 func main() {
 	if len(os.Args) < 2 {
