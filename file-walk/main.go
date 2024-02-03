@@ -189,6 +189,59 @@ func walkDir(dir string, paths chan<- string, wg *sync.WaitGroup) error {
 	return err
 }
 
+// CONCURRENT APPROACH 2 =============================================================
+
+func fileWalkConcur3(dir string) (results, error) {
+	workers := 2 * runtime.GOMAXPROCS(0)
+
+	wg := new(sync.WaitGroup)
+
+	pairs := make(chan pair, workers)
+	result := make(chan results)
+	limits := make(chan bool, workers)
+
+	for i := 0; i < workers; i++ {
+		go processFiles(paths, pairs, done)
+	}
+
+	go collectHashes(pairs, result)
+
+	wg.Add(1)
+	err := walkDir2(dir, pairs, wg, limits)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	wg.Wait()
+	close(paths)
+
+	for i := 0; i < workers; i++ {
+		<-done
+	}
+
+	close(pairs)
+
+	hashes := <-result
+	return hashes, nil
+}
+
+func walkDir2(dir string, pairs chan<- string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+		if info.Mode().IsDir() && path != dir {
+			wg.Add(1)
+			go walkDir2(path, paths, wg)
+			return filepath.SkipDir
+		}
+
+		if info.Mode().IsRegular() && info.Size() > 0 {
+			paths <- path
+		}
+
+		return nil
+	})
+}
+
 // ===================================================================================
 
 func main() {
