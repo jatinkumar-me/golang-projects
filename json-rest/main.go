@@ -27,7 +27,7 @@ func main() {
 
 	var item todo
 
-    err = json.NewDecoder(response.Body).Decode(&item)
+	err = json.NewDecoder(response.Body).Decode(&item)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(-1)
