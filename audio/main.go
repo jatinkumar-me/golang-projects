@@ -135,8 +135,17 @@ func main() {
 	}
 
 	fmt.Println(
-		"Simple Piano: Press 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', or ';' to play notes. Press 'ESC' to exit.",
+		"Simple Piano: Press 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', or ';' to play notes. Press 'ESC' to exit. Press tab to switch betwen wave functions",
 	)
+
+	waveFunctions := []waveFunction{
+		generateSineWave,
+		generateSquareWave, 
+		generateSawtoothWave, 
+		generateTriangleWave,
+	}
+
+	currWaveFunIdx := 0
 
 	for {
 		char, key, err := keyboard.GetKey()
@@ -150,9 +159,14 @@ func main() {
 			break
 		}
 
-		if freq, ok := frequencies[char]; ok {
-			wave := generateSquareWave(freq, sampleRate, duration)
+		if key == keyboard.KeyTab {
+			fmt.Println("Switching wave function")
+			currWaveFunIdx += 1
+			currWaveFunIdx = currWaveFunIdx % len(waveFunctions)
+		}
 
+		if freq, ok := frequencies[char]; ok {
+			wave := waveFunctions[currWaveFunIdx](freq, sampleRate, duration)
 			audioData.loadWave(wave)
 		}
 	}
