@@ -34,6 +34,8 @@ type AudioData struct {
 	mutex  sync.Mutex
 }
 
+type waveFunction func(float64, float64, float64) []float32
+
 func generateSineWave(freq, sampleRate, duration float64) []float32 {
 	samples := int(float64(sampleRate) * duration)
 	wave := make([]float32, samples)
